@@ -1,10 +1,5 @@
-import argparse
-import gc
-import os
 import sys
-import time
 
-import energyflow as ef
 import numpy as np
 
 # DCTR, reweights positive distribution to negative distribution
@@ -94,18 +89,16 @@ def omnifold(X_gen_i, Y_gen_i, X_det_i, Y_det_i, wdata, winit, det_model, mc_mod
             del globals()[Y_gen_i]
 
     # store model filepaths
-    model_det_fp, model_mc_fp = det_model[1].get('filepath', None), mc_model[1].get('filepath', None)
+    model_det_fp, model_mc_fp = det_model[1]['filepath'], mc_model[1]['filepath']
     
     # iterate the procedure
     for i in range(it):
 
-        # det filepaths properly
-        if model_det_fp is not None:
-            model_det_fp_i = model_det_fp.format(i)
-            det_model[1]['filepath'] = model_det_fp_i + '_Epoch-{epoch}'
-        if model_mc_fp is not None:
-            model_mc_fp_i = model_mc_fp.format(i)
-            mc_model[1]['filepath'] = model_mc_fp_i + '_Epoch-{epoch}'
+        # set filepaths properly
+        model_det_fp_i = model_det_fp.format(i)
+        det_model[1]['filepath'] = model_det_fp_i + '_Epoch-{epoch}.h5'
+        model_mc_fp_i = model_mc_fp.format(i)
+        mc_model[1]['filepath'] = model_mc_fp_i + '_Epoch-{epoch}.h5'
 
         # define models
         model_det = det_model[0](**det_model[1])
@@ -113,20 +106,22 @@ def omnifold(X_gen_i, Y_gen_i, X_det_i, Y_det_i, wdata, winit, det_model, mc_mod
 
         # load weights if not model 0
         if i > 0:
-            model_det.load_weights(model_det_fp.format(i-1))
-            model_mc.load_weights(model_mc_fp.format(i-1))
+            print('loading models from previous iteration:')
+            print(model_det_fp.format(i-1), model_mc_fp.format(i-1))
+            model_det.load_weights(model_det_fp.format(i-1) + '.h5')
+            model_mc.load_weights(model_mc_fp.format(i-1) + '.h5')
         
         # step 1: reweight sim to look like data
         w = np.concatenate((wdata, ws[-1]))
         w_train, w_val = w[perm_det[:-nval_det]], w[perm_det[-nval_det:]]
-        rw = reweight(X_det_train, Y_det_train, w_train, model_det, model_det_fp_i,
+        rw = reweight(X_det_train, Y_det_train, w_train, model_det, model_det_fp_i + '.h5',
                       fitargs, val_data=(X_det_val, Y_det_val, w_val))[invperm_det]
         ws.append(rw[len(wdata):])
 
         # step 2: reweight the prior to the learned weighting
         w = np.concatenate((ws[-1], ws[trw_ind]))
         w_train, w_val = w[perm_gen[:-nval_gen]], w[perm_gen[-nval_gen:]]
-        rw = reweight(X_gen_train, Y_gen_train, w_train, model_mc, model_mc_fp_i,
+        rw = reweight(X_gen_train, Y_gen_train, w_train, model_mc, model_mc_fp_i + '.h5',
                       fitargs, val_data=(X_gen_val, Y_gen_val, w_val))[invperm_gen]
         ws.append(rw[len(ws[-1]):])
         
